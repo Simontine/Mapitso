@@ -26,6 +26,20 @@ function reading(value: number | null | undefined, suffix = ''): string {
   return value === null || value === undefined ? '--' : `${Math.round(value)}${suffix}`;
 }
 
+function property(value: FirebaseValue | undefined, key: string): FirebaseValue | undefined {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) return value[key];
+  return undefined;
+}
+
+function numericValue(value: FirebaseValue | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function percentageValue(value: FirebaseValue | undefined): number | null {
+  const number = numericValue(value);
+  return number !== null && number >= 0 && number <= 100 ? number : null;
+}
+
 function App() {
   const [endpoint, setEndpoint] = useState(() => localStorage.getItem(endpointKey) ?? defaultEndpoint);
   const [endpointDraft, setEndpointDraft] = useState(endpoint);
@@ -130,8 +144,18 @@ function App() {
     );
   };
 
-  const soil = status?.soilValid ? status.soilPercent : null;
-  const tank = status?.tankValid ? status.tankPercent : null;
+  const firebaseSensorData = property(firebaseValues, 'sensorData');
+  const firebaseSoil = numericValue(property(firebaseSensorData, 'soilMoisture'));
+  const firebaseTank = percentageValue(property(firebaseSensorData, 'tankLevel'));
+  const firebaseTemperature = numericValue(property(firebaseSensorData, 'temp'));
+  const firebaseHumidity = percentageValue(property(firebaseSensorData, 'humidity'));
+  const controllerSoil = status?.soilValid ? status.soilPercent : null;
+  const controllerTank = status?.tankValid ? status.tankPercent : null;
+  const soil = firebaseSoil ?? controllerSoil;
+  const soilPercent = firebaseSoil === null ? controllerSoil : firebaseSoil >= 0 && firebaseSoil <= 100 ? firebaseSoil : null;
+  const tank = firebaseTank ?? controllerTank;
+  const temperature = firebaseTemperature ?? (status?.climateValid ? status.temperatureC : null);
+  const humidity = firebaseHumidity ?? (status?.climateValid ? status.humidityPercent : null);
   const tankLow = tank !== null && tank < 18;
 
   return (
@@ -173,9 +197,9 @@ function App() {
           <section className="metric-strip" id="sensors" aria-label="Live sensor readings">
             <article className="metric metric-soil">
               <div className="metric-heading"><span className="metric-icon"><Leaf size={17} /></span><span>SOIL MOISTURE</span><span className="live-tick" /></div>
-              <div className="metric-value">{reading(soil, '%')}</div>
-              <div className="metric-foot"><span>{soil === null ? 'Awaiting sensor' : soil < threshold ? 'Below target' : 'Within target'}</span><span>Target {threshold}%</span></div>
-              <div className="meter"><span style={{ width: `${soil ?? 0}%` }} /></div>
+              <div className="metric-value">{reading(soil, soilPercent === null ? '' : '%')}</div>
+              <div className="metric-foot"><span>{soil === null ? 'Awaiting sensor' : soilPercent === null ? 'Raw Firebase reading' : soilPercent < threshold ? 'Below target' : 'Within target'}</span><span>{soilPercent === null ? 'Sensor value' : `Target ${threshold}%`}</span></div>
+              {soilPercent !== null && <div className="meter"><span style={{ width: `${soilPercent}%` }} /></div>}
             </article>
             <article className={`metric metric-tank ${tankLow ? 'metric-warning' : ''}`}>
               <div className="metric-heading"><span className="metric-icon"><Droplets size={17} /></span><span>WATER RESERVE</span><span className="live-tick" /></div>
@@ -185,8 +209,8 @@ function App() {
             </article>
             <article className="metric metric-climate">
               <div className="metric-heading"><span className="metric-icon"><CloudSun size={17} /></span><span>MICROCLIMATE</span><span className="live-tick" /></div>
-              <div className="climate-values"><div><strong>{reading(status?.climateValid ? status.temperatureC : null, '°')}</strong><span>C</span><small><Thermometer size={13} /> TEMP</small></div><i /><div><strong>{reading(status?.climateValid ? status.humidityPercent : null, '%')}</strong><small><Waves size={13} /> HUMIDITY</small></div></div>
-              <div className="metric-foot"><span>{status?.climateValid ? 'Air conditions' : 'Awaiting sensor'}</span><span>DHT11</span></div>
+              <div className="climate-values"><div><strong>{reading(temperature, '°')}</strong><span>C</span><small><Thermometer size={13} /> TEMP</small></div><i /><div><strong>{reading(humidity, '%')}</strong><small><Waves size={13} /> HUMIDITY</small></div></div>
+              <div className="metric-foot"><span>{temperature !== null || humidity !== null ? 'Air conditions' : 'Awaiting sensor'}</span><span>Live readings</span></div>
             </article>
           </section>
 
