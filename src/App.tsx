@@ -64,11 +64,23 @@ function buildAiInsight(input: {
   tank: number | null;
   temperature: number | null;
   humidity: number | null;
+  environmentAlerts: Array<{ summary: string; recommendation: string }>;
   threshold: number;
   pumpOn: boolean;
   tankLow: boolean;
 }): AiInsight {
-  const { soil, tank, temperature, humidity, threshold, pumpOn, tankLow } = input;
+  const { soil, tank, temperature, humidity, environmentAlerts, threshold, pumpOn, tankLow } = input;
+
+  if (environmentAlerts.length > 0) {
+    return {
+      badge: 'Attention',
+      headline: 'Environmental conditions need attention',
+      summary: environmentAlerts.map((alert) => alert.summary).join(' '),
+      confidence: 88,
+      recommendations: environmentAlerts.map((alert) => alert.recommendation),
+      recommendedThreshold: null,
+    };
+  }
 
   if (soil === null) {
     return {
@@ -259,10 +271,31 @@ function App() {
   const temperature = firebaseTemperature ?? (status?.climateValid ? status.temperatureC : null);
   const humidity = firebaseHumidity ?? (status?.climateValid ? status.humidityPercent : null);
   const tankLow = tank !== null && tank < 18;
+  const tankWarning = tank !== null && tank < 20;
+  const temperatureOutOfRange = temperature !== null && (temperature < 20 || temperature > 35);
+  const humidityOutOfRange = humidity !== null && (humidity < 20 || humidity > 70);
+  const soilVeryWet = soilPercent !== null && soilPercent > threshold + 10 && !status?.pumpOn;
+  const environmentAlerts = [
+    ...(temperatureOutOfRange ? [{
+      summary: `Temperature is ${Math.round(temperature)}°C, outside the 20–35°C range.`,
+      recommendation: 'Check the garden temperature and protect plants from excessive heat or cold.',
+    }] : []),
+    ...(humidityOutOfRange ? [{
+      summary: `Humidity is ${Math.round(humidity)}%, outside the 20–70% range.`,
+      recommendation: 'Check airflow and plant conditions; very dry or humid air can stress the garden.',
+    }] : []),
+    ...(tankWarning ? [{
+      summary: `Tank level is ${Math.round(tank)}%, below the 20% reserve alert.`,
+      recommendation: 'Refill the reservoir soon. The pump remains locked out if the level falls below 18%.',
+    }] : []),
+  ];
   const notifications = [
     ...(!connected ? [{ id: 'controller', level: 'warning', title: 'Controller is offline', detail: 'Check the device address and Wi-Fi connection to restore live control.' }] : []),
-    ...(tankLow ? [{ id: 'tank', level: 'critical', title: 'Water reserve is too low', detail: `Tank level is ${Math.round(tank ?? 0)}%. Refill before running the pump.` }] : []),
-    ...(soilPercent !== null && soilPercent < threshold && !tankLow ? [{ id: 'soil', level: 'warning', title: 'Soil moisture is below target', detail: `Moisture is ${Math.round(soilPercent)}%, below your ${threshold}% target.` }] : []),
+    ...(tankWarning ? [{ id: 'tank', level: tankLow ? 'critical' : 'warning', title: tankLow ? 'Water reserve is too low' : 'Water reserve is low', detail: tankLow ? `Tank level is ${Math.round(tank ?? 0)}%. Refill before running the pump.` : `Tank level is ${Math.round(tank ?? 0)}%, below the 20% reserve alert. Refill soon.` }] : []),
+    ...(temperatureOutOfRange ? [{ id: 'temperature', level: 'warning', title: 'Temperature is outside range', detail: `Temperature is ${Math.round(temperature ?? 0)}°C. Expected range: 20–35°C.` }] : []),
+    ...(humidityOutOfRange ? [{ id: 'humidity', level: 'warning', title: 'Humidity is outside range', detail: `Humidity is ${Math.round(humidity ?? 0)}%. Expected range: 20–70%.` }] : []),
+    ...(soilPercent !== null && soilPercent < threshold ? [{ id: 'soil', level: 'warning', title: 'Soil moisture is below target', detail: `Moisture is ${Math.round(soilPercent)}%, below your ${threshold}% target.` }] : []),
+    ...(soilVeryWet ? [{ id: 'soil-wet', level: 'warning', title: 'Soil moisture is well above target', detail: `Moisture is ${Math.round(soilPercent)}%, more than 10 points above your ${threshold}% target. Consider delaying the next watering cycle.` }] : []),
     ...(connected && soilPercent === null ? [{ id: 'soil-sensor', level: 'warning', title: 'Soil sensor has no valid reading', detail: 'Check the probe connection; automatic irrigation needs a valid moisture value.' }] : []),
     ...(firebaseError ? [{ id: 'firebase', level: 'warning', title: 'Firebase data is unavailable', detail: firebaseError }] : []),
     ...(status?.pumpOn ? [{ id: 'pump', level: 'info', title: 'Watering is in progress', detail: 'The irrigation pump is currently running.' }] : []),
@@ -285,11 +318,12 @@ function App() {
         tank,
         temperature,
         humidity,
+        environmentAlerts,
         threshold,
         pumpOn: Boolean(status?.pumpOn),
         tankLow,
       }),
-    [humidity, soilPercent, status?.pumpOn, tank, tankLow, temperature, threshold],
+    [environmentAlerts, humidity, soilPercent, status?.pumpOn, tank, tankLow, temperature, threshold],
   );
 
   const applyAiThreshold = () => {
