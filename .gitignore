@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tsbuildinfo
+firmware/.pio/
+firmware/src/secrets.h
+.DS_Store

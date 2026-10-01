@@ -1,0 +1,17 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Fieldline dashboard",
+			"type": "shell",
+			"command": "/Users/simontine/.nvm/versions/node/v20.19.5/bin/node",
+			"args": [
+				"node_modules/vite/bin/vite.js",
+				"--host",
+				"0.0.0.0"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
