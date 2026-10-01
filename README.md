@@ -1,4 +1,4 @@
-# LeafLink Smart Irrigation
+# aquaSense Smart Irrigation
 
 A garden irrigation controller with an ESP32 sensor/pump unit and a React dashboard. The browser and ESP32 must be on the same trusted Wi-Fi network. The controller exposes a local REST API, and the dashboard also reads the configured Firebase Realtime Database.
 

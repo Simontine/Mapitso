@@ -24,7 +24,7 @@ import { firebaseApi, irrigationApi, type FirebaseValue, type IrrigationMode, ty
 import { currentSession, logOut } from './auth';
 import AuthScreen from './AuthScreen';
 
-const endpointKey = 'LeafLink-controller-url';
+const endpointKey = 'aquaSense-controller-url';
 const defaultEndpoint = 'http://irrigation-controller.local';
 const defaultThreshold = 38;
 
@@ -342,7 +342,7 @@ function App() {
   return (
     <main className="app-shell">
       <aside className="rail" aria-label="Main navigation">
-        <a className="brand-mark" href="#overview" aria-label="LeafLink home"><Sprout size={22} strokeWidth={2.1} /></a>
+        <a className="brand-mark" href="#overview" aria-label="aquaSense home"><Sprout size={22} strokeWidth={2.1} /></a>
         <div className="rail-rule" />
         <a className={`rail-link ${activeTab === 'overview' ? 'active' : ''}`} href="#overview" aria-label="Overview" title="Overview" onClick={() => setActiveTab('overview')}><Activity size={19} /></a>
         <a className="rail-link" href="#sensors" aria-label="Sensors" title="Sensors"><Waves size={19} /></a>
@@ -356,7 +356,7 @@ function App() {
 
       <section className="workspace" id="overview">
         <header className="topbar">
-          <div className="brand-lockup"><span className="brand-name">LeafLink</span><span className="brand-divider" /><span className="site-name">GARDEN / NORTH BED</span></div>
+          <div className="brand-lockup"><span className="brand-name">aquaSense</span><span className="brand-divider" /><span className="site-name">GARDEN / NORTH BED</span></div>
           <div className="topbar-right">
             <span className={`connection-state ${connected ? 'is-online' : ''}`}>
               {connected ? <Wifi size={15} /> : <WifiOff size={15} />}
@@ -442,7 +442,7 @@ function App() {
           <section className="ai-panel" aria-live="polite">
             <div className="ai-header">
               <div>
-                <span className="eyebrow">LeafLink AI</span>
+                <span className="eyebrow">aquaSense AI</span>
                 <h2>Adaptive irrigation guidance</h2>
               </div>
               <div className="ai-confidence">
@@ -510,7 +510,7 @@ function App() {
             </>
           )}
           {message && <div className="toast" role="status">{message}</div>}
-          <footer className="footer"><span>LeafLink <i>·</i> LOCAL CONTROL</span><span><span className={`footer-dot ${connected ? 'online' : ''}`} />{connected ? 'DATA STREAM ACTIVE' : 'RECONNECTING'} <button onClick={() => setRefreshTick((tick) => tick + 1)} aria-label="Retry connection"><RefreshCw size={12} /></button></span></footer>
+          <footer className="footer"><span>aquaSense <i>·</i> LOCAL CONTROL</span><span><span className={`footer-dot ${connected ? 'online' : ''}`} />{connected ? 'DATA STREAM ACTIVE' : 'RECONNECTING'} <button onClick={() => setRefreshTick((tick) => tick + 1)} aria-label="Retry connection"><RefreshCw size={12} /></button></span></footer>
         </div>
       </section>
     </main>

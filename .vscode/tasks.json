@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Run LeafLink dashboard",
+			"label": "Run aquaSense dashboard",
 			"type": "shell",
 			"command": "/Users/simontine/.nvm/versions/node/v20.19.5/bin/node",
 			"args": [

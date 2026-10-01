@@ -1,4 +1,4 @@
-# LeafLink Smart Irrigation
+# aquaSense Smart Irrigation
 
 - Frontend: React + TypeScript + Vite in `src/`; run `npm run build` for validation.
 - Device: ESP32 DevKit V1 firmware in `firmware/`, built with PlatformIO Arduino.

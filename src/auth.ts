@@ -4,8 +4,8 @@ interface StoredAccount {
   passwordHash: string;
 }
 
-const accountsKey = 'LeafLink-accounts';
-const sessionKey = 'LeafLink-session';
+const accountsKey = 'aquaSense-accounts';
+const sessionKey = 'aquaSense-session';
 const passwordIterations = 120_000;
 
 function readAccounts(): StoredAccount[] {

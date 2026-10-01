@@ -45,22 +45,22 @@ function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   return (
     <main className="auth-layout">
       <aside className="auth-aside">
-        <a className="auth-brand" href="#" aria-label="LeafLink"><Sprout size={21} /><span>LeafLink</span></a>
+        <a className="auth-brand" href="#" aria-label="aquaSense"><Sprout size={21} /><span>aquaSense</span></a>
         <div className="auth-story">
           <span className="auth-eyebrow">GROW WITH INTENTION</span>
           <h1>A little more care.<br /><em>Right on time.</em></h1>
-          <p>Know what your garden needs, and let LeafLink take care of the rest.</p>
+          <p>Know what your garden needs, and let aquaSense take care of the rest.</p>
         </div>
-        <span className="auth-aside-caption">LeafLink / GARDEN SYSTEMS</span>
+        <span className="auth-aside-caption">aquaSense / GARDEN SYSTEMS</span>
       </aside>
 
       <section className="auth-main" aria-labelledby="auth-title">
         <div className="auth-form-wrap">
-          <span className="auth-mobile-brand"><Sprout size={19} /> LeafLink</span>
+          <span className="auth-mobile-brand"><Sprout size={19} /> aquaSense</span>
           <div className="auth-form-heading">
             <span className="eyebrow"><span className="eyebrow-line" /> YOUR GARDEN, CONNECTED</span>
             <h2 id="auth-title">{isSignup ? 'Create your account' : 'Welcome back'}</h2>
-            <p>{isSignup ? 'Start managing your garden with LeafLink.' : 'Sign in to check in on your garden.'}</p>
+            <p>{isSignup ? 'Start managing your garden with aquaSense.' : 'Sign in to check in on your garden.'}</p>
           </div>
 
           <form className="auth-form" onSubmit={submit}>
@@ -109,7 +109,7 @@ function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </form>
 
           <p className="auth-switch">
-            {isSignup ? 'Already have an account?' : 'New to LeafLink?'}{' '}
+            {isSignup ? 'Already have an account?' : 'New to aquaSense?'}{' '}
             <button type="button" onClick={switchMode}>{isSignup ? 'Sign in' : 'Create an account'}</button>
           </p>
           <p className="auth-local-note">Local demo access. Accounts are stored in this browser only and are not protected by a server.</p>
