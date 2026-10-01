@@ -14,6 +14,16 @@ export interface IrrigationStatus {
   updatedAt: number;
 }
 
+export type FirebaseValue =
+  | string
+  | number
+  | boolean
+  | null
+  | FirebaseValue[]
+  | { [key: string]: FirebaseValue };
+
+const firebaseDatabaseUrl = 'https://irrigation-system-ffb92-default-rtdb.firebaseio.com/.json';
+
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
     ...init,
@@ -36,4 +46,15 @@ export const irrigationApi = {
       method: 'POST',
       body: JSON.stringify({ mode, pump }),
     }),
+};
+
+export const firebaseApi = {
+  values: async (): Promise<FirebaseValue> => {
+    const response = await fetch(firebaseDatabaseUrl, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new Error(`Firebase returned ${response.status}`);
+    return response.json() as Promise<FirebaseValue>;
+  },
 };

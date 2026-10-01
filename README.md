@@ -1,6 +1,6 @@
 # Fieldline Smart Irrigation
 
-A local-first garden irrigation controller with an ESP32 sensor/pump unit and a React dashboard. The browser and ESP32 must be on the same trusted Wi-Fi network. The controller exposes a small REST API; no cloud service or account is required.
+A garden irrigation controller with an ESP32 sensor/pump unit and a React dashboard. The browser and ESP32 must be on the same trusted Wi-Fi network. The controller exposes a local REST API, and the dashboard also reads the configured Firebase Realtime Database.
 
 ## Hardware assumptions
 
@@ -60,7 +60,7 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL, then set the ESP32 address in the **Controller connection** field if needed. Readings refresh every five seconds. The dashboard can switch between automatic and manual modes, set the soil target, and operate the pump manually. A production bundle is created with `npm run build`.
+Open the Vite URL, then set the ESP32 address in the **Controller connection** field if needed. Controller readings and the complete Firebase database root refresh every five seconds. Firebase values are displayed read-only and are not used to control the pump. The configured database currently includes pet location and geofence history; public read rules expose those values to anyone with the URL, so restrict the database rules if that data should not be public. A production bundle is created with `npm run build`.
 
 The ESP32 API permits cross-origin requests and has no authentication because it is intended only for a trusted local network. Do not expose it directly to the internet or an untrusted network.
 

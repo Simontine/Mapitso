@@ -16,23 +16,11 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import { irrigationApi, type IrrigationMode, type IrrigationStatus } from './api';
+import { firebaseApi, irrigationApi, type FirebaseValue, type IrrigationMode, type IrrigationStatus } from './api';
 
 const endpointKey = 'fieldline-controller-url';
 const defaultEndpoint = 'http://irrigation-controller.local';
-const demoStatus: IrrigationStatus = {
-  soilPercent: 41,
-  tankPercent: 64,
-  temperatureC: 24,
-  humidityPercent: 58,
-  pumpOn: false,
-  mode: 'auto',
-  moistureThreshold: 38,
-  soilValid: true,
-  tankValid: true,
-  climateValid: true,
-  updatedAt: Date.now(),
-};
+const defaultThreshold = 38;
 
 function reading(value: number | null | undefined, suffix = ''): string {
   return value === null || value === undefined ? '--' : `${Math.round(value)}${suffix}`;
@@ -41,13 +29,16 @@ function reading(value: number | null | undefined, suffix = ''): string {
 function App() {
   const [endpoint, setEndpoint] = useState(() => localStorage.getItem(endpointKey) ?? defaultEndpoint);
   const [endpointDraft, setEndpointDraft] = useState(endpoint);
-  const [status, setStatus] = useState<IrrigationStatus>(demoStatus);
-  const [connected, setConnected] = useState(true);
-  const [threshold, setThreshold] = useState(demoStatus.moistureThreshold);
+  const [status, setStatus] = useState<IrrigationStatus>();
+  const [connected, setConnected] = useState(false);
+  const [threshold, setThreshold] = useState(defaultThreshold);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [firebaseValues, setFirebaseValues] = useState<FirebaseValue>();
+  const [firebaseError, setFirebaseError] = useState('');
+  const [firebaseUpdatedAt, setFirebaseUpdatedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -56,16 +47,13 @@ function App() {
         const next = await irrigationApi.status(endpoint);
         if (!alive) return;
         setStatus(next);
+        setThreshold(next.moistureThreshold);
         setConnected(true);
         setLastUpdated(new Date());
         setMessage('');
       } catch {
         if (alive) {
-          setConnected(true);
-          setStatus(demoStatus);
-          setThreshold(demoStatus.moistureThreshold);
-          setLastUpdated(new Date());
-          setMessage('Showing demo values');
+          setConnected(false);
         }
       }
     };
@@ -76,6 +64,27 @@ function App() {
       window.clearInterval(timer);
     };
   }, [endpoint, refreshTick]);
+
+  useEffect(() => {
+    let alive = true;
+    const refreshFirebase = async () => {
+      try {
+        const values = await firebaseApi.values();
+        if (!alive) return;
+        setFirebaseValues(values);
+        setFirebaseError('');
+        setFirebaseUpdatedAt(new Date());
+      } catch (error) {
+        if (alive) setFirebaseError(error instanceof Error ? error.message : 'Could not load Firebase values');
+      }
+    };
+    void refreshFirebase();
+    const timer = window.setInterval(() => void refreshFirebase(), 5000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [refreshTick]);
 
   const runCommand = async (command: () => Promise<unknown>, success: string) => {
     setBusy(true);
@@ -210,6 +219,13 @@ function App() {
             <div className="connection-panel-icon"><Wifi size={17} /></div>
             <div className="connection-info"><strong>Controller connection</strong><span>Same Wi-Fi network · ESP32 REST API</span></div>
             <form className="endpoint-form" onSubmit={saveEndpoint}><label htmlFor="endpoint">DEVICE ADDRESS</label><div className="endpoint-input-wrap"><input id="endpoint" value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} spellCheck={false} /><button type="submit" title="Save device address" aria-label="Save device address"><Check size={16} /></button></div></form>
+          </section>
+          <section className="firebase-panel" aria-label="Firebase values">
+            <div className="firebase-heading">
+              <div><span className="eyebrow">REALTIME DATABASE</span><h2>Firebase values</h2></div>
+              <span>{firebaseError || (firebaseUpdatedAt ? `Updated ${firebaseUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Loading values…')}</span>
+            </div>
+            <pre className="firebase-json" aria-live="polite">{firebaseValues === undefined ? (firebaseError || 'Loading values…') : JSON.stringify(firebaseValues, null, 2)}</pre>
           </section>
           {message && <div className="toast" role="status">{message}</div>}
           <footer className="footer"><span>FIELDLINE <i>·</i> LOCAL CONTROL</span><span><span className={`footer-dot ${connected ? 'online' : ''}`} />{connected ? 'DATA STREAM ACTIVE' : 'RECONNECTING'} <button onClick={() => setRefreshTick((tick) => tick + 1)} aria-label="Retry connection"><RefreshCw size={12} /></button></span></footer>

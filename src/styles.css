@@ -126,6 +126,11 @@ h1 em { color: var(--green); font-style: normal; }
 .endpoint-input-wrap { display: flex; border: 1px solid #d9dfd4; background: #f9faf5; }
 .endpoint-input-wrap input { width: min(275px, 30vw); padding: 7px 9px; border: 0; outline: none; background: transparent; color: #35483a; font: 10px var(--mono); }
 .endpoint-input-wrap button { width: 31px; display: grid; place-items: center; border: 0; border-left: 1px solid #d9dfd4; background: transparent; color: #3d714a; cursor: pointer; }
+.firebase-panel { padding: 20px 0 4px; border-bottom: 1px solid var(--line); }
+.firebase-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
+.firebase-heading h2 { margin: 7px 0 0; font: 600 17px 'Manrope', sans-serif; }
+.firebase-heading > span { color: #849084; font: 9px var(--mono); text-align: right; }
+.firebase-json { max-height: min(65vh, 520px); overflow: auto; margin: 14px 0 16px; padding: 13px; border: 1px solid var(--line); background: #eef0e8; color: #34483a; font: 10px/1.6 var(--mono); white-space: pre; }
 .toast { position: fixed; right: 24px; bottom: 24px; padding: 11px 15px; background: #1d3b2a; color: white; font-size: 11px; box-shadow: 0 5px 18px #17231c25; }
 .footer { display: flex; justify-content: space-between; align-items: center; padding-top: 16px; color: #899287; font-size: 8px; }
 .footer i { margin: 0 5px; font-style: normal; }
@@ -178,6 +183,8 @@ h1 em { color: var(--green); font-style: normal; }
   .connection-info { min-width: 0; }
   .endpoint-form { width: 100%; margin: 4px 0 0; }
   .endpoint-input-wrap input { width: 100%; }
+  .firebase-heading { align-items: start; flex-direction: column; gap: 7px; }
+  .firebase-heading > span { text-align: left; }
   .footer { font-size: 7px; }
 }
 @media (max-width: 390px) {
