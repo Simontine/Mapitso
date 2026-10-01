@@ -3,4 +3,6 @@ dist/
 *.tsbuildinfo
 firmware/.pio/
 firmware/src/secrets.h
+Esp32 Code/firmware/.pio/
+Esp32 Code/firmware/secrets.h
 .DS_Store

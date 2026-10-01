@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
+#include <U8g2lib.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
@@ -19,6 +20,8 @@ constexpr uint8_t TANK_TRIG_PIN = 23;
 constexpr uint8_t TANK_ECHO_PIN = 18;
 constexpr uint8_t DHT_PIN = 4;
 constexpr uint8_t PUMP_RELAY_PIN = 26;
+constexpr uint8_t OLED_SDA_PIN = 21;
+constexpr uint8_t OLED_SCL_PIN = 22;
 constexpr uint8_t DHT_TYPE = DHT11;
 
 constexpr int SOIL_DRY_RAW = 3200;
@@ -31,6 +34,7 @@ constexpr uint32_t WIFI_RETRY_MS = 10000;
 
 WebServer server(80);
 DHT dht(DHT_PIN, DHT_TYPE);
+U8G2_SSD1309_128X64_NONAME0_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
 
 float soilPercent = 0.0f;
 float tankPercent = 0.0f;
@@ -44,6 +48,55 @@ bool pumpOn = false;
 String irrigationMode = "auto";
 uint32_t lastSensorRead = 0;
 uint32_t lastWifiAttempt = 0;
+
+void updateDisplay() {
+  char soilLine[24];
+  char soilValue[5];
+  char tankValue[5];
+  char climateLine[24];
+  char controlLine[24];
+
+  if (soilValid) {
+    snprintf(soilValue, sizeof(soilValue), "%d", static_cast<int>(roundf(soilPercent)));
+  } else {
+    snprintf(soilValue, sizeof(soilValue), "--");
+  }
+  if (tankValid) {
+    snprintf(tankValue, sizeof(tankValue), "%d", static_cast<int>(roundf(tankPercent)));
+  } else {
+    snprintf(tankValue, sizeof(tankValue), "--");
+  }
+
+  snprintf(soilLine, sizeof(soilLine), "SOIL %s%%  TANK %s%%", soilValue, tankValue);
+  if (climateValid) {
+    snprintf(climateLine, sizeof(climateLine), "AIR %.0fC  RH %.0f%%", temperatureC, humidityPercent);
+  } else {
+    snprintf(climateLine, sizeof(climateLine), "AIR --C   RH --%%");
+  }
+  snprintf(controlLine, sizeof(controlLine), "PUMP %s  %s", pumpOn ? "ON" : "OFF", irrigationMode == "auto" ? "AUTO" : "MANUAL");
+
+  display.clearBuffer();
+  display.setFont(u8g2_font_6x10_tf);
+  display.drawStr(0, 10, "FIELDLINE IRRIGATION");
+  display.drawHLine(0, 13, 128);
+  display.setFont(u8g2_font_5x7_tf);
+  display.drawStr(0, 25, soilLine);
+  display.drawStr(0, 37, climateLine);
+  display.drawStr(0, 49, controlLine);
+
+  const char *statusLine = "SYSTEM READY";
+  if (!tankValid) {
+    statusLine = "TANK SENSOR CHECK";
+  } else if (tankPercent < TANK_LOW_LIMIT_PERCENT) {
+    statusLine = "TANK LOW - PUMP LOCKED";
+  } else if (irrigationMode == "auto" && !soilValid) {
+    statusLine = "SOIL SENSOR CHECK";
+  } else if (pumpOn) {
+    statusLine = "IRRIGATION ACTIVE";
+  }
+  display.drawStr(0, 62, statusLine);
+  display.sendBuffer();
+}
 
 void addCorsHeaders() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -238,6 +291,10 @@ void setup() {
   analogReadResolution(12);
   analogSetPinAttenuation(SOIL_PIN, ADC_11db);
   dht.begin();
+  Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
+  display.begin();
+  display.setContrast(180);
+  updateDisplay();
 
   connectWifi();
   server.on("/api/status", HTTP_GET, handleStatus);
@@ -267,5 +324,6 @@ void loop() {
     lastSensorRead = millis();
     updateSensors();
     applyAutomation();
+    updateDisplay();
   }
 }
