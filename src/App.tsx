@@ -7,6 +7,7 @@ import {
   CloudSun,
   Droplets,
   Leaf,
+  LogOut,
   Power,
   RefreshCw,
   SlidersHorizontal,
@@ -17,6 +18,8 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { firebaseApi, irrigationApi, type FirebaseValue, type IrrigationMode, type IrrigationStatus } from './api';
+import { currentSession, logOut } from './auth';
+import AuthScreen from './AuthScreen';
 
 const endpointKey = 'fieldline-controller-url';
 const defaultEndpoint = 'http://irrigation-controller.local';
@@ -41,6 +44,7 @@ function percentageValue(value: FirebaseValue | undefined): number | null {
 }
 
 function App() {
+  const [user, setUser] = useState<string | null>(() => currentSession());
   const [endpoint, setEndpoint] = useState(() => localStorage.getItem(endpointKey) ?? defaultEndpoint);
   const [endpointDraft, setEndpointDraft] = useState(endpoint);
   const [status, setStatus] = useState<IrrigationStatus>();
@@ -55,6 +59,7 @@ function App() {
   const [firebaseUpdatedAt, setFirebaseUpdatedAt] = useState<Date | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     let alive = true;
     const refresh = async () => {
       try {
@@ -77,9 +82,10 @@ function App() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [endpoint, refreshTick]);
+  }, [endpoint, refreshTick, user]);
 
   useEffect(() => {
+    if (!user) return;
     let alive = true;
     const refreshFirebase = async () => {
       try {
@@ -98,7 +104,7 @@ function App() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [refreshTick]);
+  }, [refreshTick, user]);
 
   const runCommand = async (command: () => Promise<unknown>, success: string) => {
     setBusy(true);
@@ -158,6 +164,13 @@ function App() {
   const humidity = firebaseHumidity ?? (status?.climateValid ? status.humidityPercent : null);
   const tankLow = tank !== null && tank < 18;
 
+  const handleLogout = () => {
+    logOut();
+    setUser(null);
+  };
+
+  if (!user) return <AuthScreen onAuthenticated={setUser} />;
+
   return (
     <main className="app-shell">
       <aside className="rail" aria-label="Main navigation">
@@ -178,6 +191,7 @@ function App() {
               {connected ? 'Controller online' : 'Controller offline'}
             </span>
             <span className="topbar-date">{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Waiting for data'}</span>
+            <div className="account-control"><span>{user}</span><button onClick={handleLogout} title="Sign out" aria-label="Sign out"><LogOut size={15} /></button></div>
           </div>
         </header>
 

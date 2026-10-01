@@ -46,6 +46,10 @@ a { color: inherit; }
 .connection-state { gap: 7px; color: #a45a42; }
 .connection-state.is-online { color: var(--green); }
 .topbar-date { font: 10px var(--mono); }
+.account-control { display: flex; align-items: center; gap: 7px; padding-left: 11px; border-left: 1px solid var(--line); color: #526254; font: 9px var(--mono); }
+.account-control span { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-control button { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid var(--line); background: transparent; color: #637264; cursor: pointer; }
+.account-control button:hover { background: #fffefa; color: var(--green); }
 .content { max-width: 1250px; margin: 0 auto; padding: 42px 5.2% 22px; }
 .intro-row { min-height: 203px; display: flex; justify-content: space-between; align-items: center; gap: 32px; padding-bottom: 32px; }
 .eyebrow { display: flex; align-items: center; gap: 8px; color: #758175; }
@@ -138,7 +142,44 @@ h1 em { color: var(--green); font-style: normal; }
 .footer-dot { width: 6px; height: 6px; }
 .footer button { display: grid; place-items: center; padding: 2px; border: 0; background: transparent; color: #899287; cursor: pointer; }
 
+.auth-layout { min-height: 100vh; min-height: 100svh; display: grid; grid-template-columns: minmax(320px, .92fr) minmax(420px, 1.08fr); background: var(--paper); }
+.auth-aside { position: relative; min-height: 100%; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 34px 8%; color: #f4f5ed; background: #214b34 url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1500&q=85') center / cover; }
+.auth-aside::before { position: absolute; inset: 0; content: ''; background: linear-gradient(180deg, #14291da8 0%, #1d3b2a62 40%, #14291dcc 100%); }
+.auth-brand, .auth-story, .auth-aside-caption { position: relative; z-index: 1; }
+.auth-brand { width: fit-content; display: flex; align-items: center; gap: 9px; color: #f4f5ed; text-decoration: none; font: 800 19px 'Manrope', sans-serif; }
+.auth-brand svg { color: var(--lime); }
+.auth-story { max-width: 480px; margin: 0 auto; padding: 64px 0; animation: auth-arrive .55s ease both; }
+.auth-eyebrow { color: #d5e2ca; font: 500 10px var(--mono); }
+.auth-story h1 { margin: 17px 0 14px; font: 600 46px/1.12 'Manrope', sans-serif; }
+.auth-story h1 em { color: var(--lime); font-style: normal; }
+.auth-story p { max-width: 350px; margin: 0; color: #eef2e8cc; font-size: 14px; line-height: 1.7; }
+.auth-aside-caption { color: #eef2e899; font: 9px var(--mono); }
+.auth-main { display: grid; place-items: center; padding: 48px 8%; }
+.auth-form-wrap { width: min(390px, 100%); animation: auth-arrive .55s ease .06s both; }
+.auth-mobile-brand { display: none; align-items: center; gap: 8px; margin-bottom: 40px; color: var(--green); font: 800 17px 'Manrope', sans-serif; }
+.auth-form-heading h2 { margin: 16px 0 7px; font: 600 29px/1.2 'Manrope', sans-serif; }
+.auth-form-heading > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.auth-form { display: grid; gap: 9px; margin-top: 27px; }
+.auth-form label { margin-top: 8px; color: #3e4c40; font-size: 11px; font-weight: 600; }
+.auth-form input { min-width: 0; height: 42px; padding: 0 12px; border: 1px solid #d9dfd4; border-radius: 0; background: #fbfcf8; color: var(--ink); font-size: 12px; }
+.auth-form input::placeholder { color: #a0a79e; }
+.auth-submit { min-height: 44px; display: flex; justify-content: space-between; align-items: center; margin-top: 11px; padding: 0 14px; border: 0; background: var(--green); color: #f7f8f2; font-size: 11px; cursor: pointer; transition: background .18s ease; }
+.auth-submit:hover:not(:disabled) { background: #17482e; }
+.auth-error { margin: 4px 0 0; color: #a64f38; font-size: 11px; line-height: 1.5; }
+.auth-switch { margin: 20px 0 0; color: #788178; text-align: center; font-size: 11px; }
+.auth-switch button { padding: 2px; border: 0; background: none; color: var(--green); font-weight: 700; cursor: pointer; }
+.auth-local-note { margin: 34px 0 0; padding-top: 14px; border-top: 1px solid var(--line); color: #889187; font-size: 9px; line-height: 1.6; text-align: center; }
+@keyframes auth-arrive { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+
 @media (min-width: 1400px) { .content { padding-top: 52px; } .intro-row { min-height: 220px; } }
+@media (max-width: 850px) {
+  .auth-layout { grid-template-columns: 1fr; }
+  .auth-aside { min-height: 260px; padding: 28px 6%; }
+  .auth-story { margin: auto 0 0; padding: 0 0 4px; }
+  .auth-story h1 { font-size: 32px; }
+  .auth-story p { font-size: 12px; }
+  .auth-main { padding: 38px 6%; }
+}
 @media (max-width: 900px) {
   .content { padding-right: 4%; padding-left: 4%; }
   .metric { padding-right: 16px; }
@@ -147,6 +188,18 @@ h1 em { color: var(--green); font-style: normal; }
   .connection-info { min-width: 145px; }
 }
 @media (max-width: 650px) {
+  .auth-layout { grid-template-columns: 1fr; }
+  .auth-aside { min-height: 225px; padding: 20px 22px; }
+  .auth-brand, .auth-aside-caption { display: none; }
+  .auth-story { margin: auto 0 0; padding: 0 0 4px; }
+  .auth-story h1 { margin: 9px 0 6px; font-size: 29px; }
+  .auth-story p { max-width: 300px; font-size: 11px; }
+  .auth-eyebrow { font-size: 8px; }
+  .auth-main { padding: 30px 23px 36px; }
+  .auth-mobile-brand { display: flex; margin-bottom: 25px; }
+  .auth-form-heading h2 { font-size: 25px; }
+  .auth-form { margin-top: 19px; }
+  .auth-local-note { margin-top: 24px; }
   .app-shell { display: block; padding-bottom: 54px; }
   .rail { position: fixed; z-index: 5; inset: auto 0 0; width: 100%; height: 53px; flex-direction: row; justify-content: space-around; padding: 0 12px; }
   .brand-mark { width: 33px; height: 33px; border-radius: 10px; }
@@ -160,6 +213,8 @@ h1 em { color: var(--green); font-style: normal; }
   .topbar-right { gap: 0; }
   .topbar-date { display: none; }
   .connection-state { font-size: 10px; }
+  .account-control { padding-left: 7px; }
+  .account-control span { display: none; }
   .content { padding: 28px 18px 18px; }
   .intro-row { min-height: 0; align-items: start; padding-bottom: 24px; }
   h1 { font-size: 34px; }
