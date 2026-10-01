@@ -31,6 +31,8 @@ a { color: inherit; }
 .rail-rule { width: 28px; height: 1px; margin: 26px 0 17px; background: #ffffff2c; }
 .rail-link { width: 40px; height: 40px; margin: 5px 0; display: grid; place-items: center; color: #a2b3a4; border-radius: 11px; text-decoration: none; transition: color .18s, background .18s; }
 .rail-link:hover, .rail-link.active { color: #eff5e8; background: #ffffff19; }
+.notification-link { position: relative; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.notification-count { position: absolute; top: 1px; right: 1px; min-width: 15px; height: 15px; display: grid; place-items: center; padding: 0 3px; border: 1px solid #1d3b2a; border-radius: 9px; background: #e48e6a; color: #17231c; font: 500 8px var(--mono); }
 .rail-bottom { flex: 1; display: flex; align-items: end; }
 .connection-dot, .footer-dot { display: block; width: 7px; height: 7px; border-radius: 50%; background: #dc9877; }
 .connection-dot.online, .footer-dot.online { background: #b9df6b; box-shadow: 0 0 0 4px #b9df6b20; }
@@ -154,6 +156,33 @@ h1 em { color: var(--green); font-style: normal; }
 .firebase-heading h2 { margin: 7px 0 0; font: 600 17px 'Manrope', sans-serif; }
 .firebase-heading > span { color: #849084; font: 9px var(--mono); text-align: right; }
 .firebase-json { max-height: min(65vh, 520px); overflow: auto; margin: 14px 0 16px; padding: 13px; border: 1px solid var(--line); background: #eef0e8; color: #34483a; font: 10px/1.6 var(--mono); white-space: pre; }
+.notifications-view { min-height: calc(100vh - 145px); padding: 25px 0 48px; animation: auth-arrive .3s ease both; }
+.notifications-heading { min-height: 178px; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.notifications-heading h1 { margin-top: 17px; }
+.notification-summary { display: flex; align-items: baseline; gap: 8px; padding: 10px 13px; border: 1px solid var(--line); color: #69776a; font: 10px var(--mono); }
+.notification-summary strong { color: var(--green); font: 600 22px 'Manrope', sans-serif; }
+.notification-summary.has-alerts strong { color: #ad5a3c; }
+.notification-list { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.notification-item { display: flex; gap: 15px; padding: 20px 5px; }
+.notification-item + .notification-item { border-top: 1px solid var(--line); }
+.notification-symbol { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; color: #a75c3f; background: #f4e6dc; }
+.notification-critical .notification-symbol { color: #a44632; background: #f2ddd6; }
+.notification-info .notification-symbol { color: #356e71; background: #dfece8; }
+.notification-copy { min-width: 0; flex: 1; }
+.notification-title-row { display: flex; justify-content: space-between; align-items: baseline; gap: 15px; }
+.notification-title-row h2 { margin: 1px 0 0; font: 600 13px 'Manrope', sans-serif; }
+.notification-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; }
+.notification-actions > span { color: #a45b40; font: 9px var(--mono); }
+.notification-info .notification-actions > span { color: #527b78; }
+.dismiss-notification { width: 27px; height: 27px; display: grid; place-items: center; border: 0; background: transparent; color: #778178; cursor: pointer; }
+.dismiss-notification:hover { background: #e9ece4; color: var(--ink); }
+.notification-copy p { margin: 6px 0 0; color: #778178; font-size: 11px; line-height: 1.6; }
+.notifications-empty { display: flex; align-items: center; gap: 13px; padding: 24px 5px; }
+.notifications-empty > span { width: 34px; height: 34px; display: grid; place-items: center; color: #356d46; background: #e2edd8; }
+.notifications-empty strong { font: 600 13px 'Manrope', sans-serif; }
+.notifications-empty p { margin: 5px 0 0; color: #778178; font-size: 11px; line-height: 1.6; }
+.back-overview { display: flex; align-items: center; gap: 8px; margin-top: 19px; padding: 8px 0; border: 0; background: transparent; color: var(--green); font-size: 11px; font-weight: 600; cursor: pointer; }
+.back-overview:hover { color: #59804a; }
 .toast { position: fixed; right: 24px; bottom: 24px; padding: 11px 15px; background: #1d3b2a; color: white; font-size: 11px; box-shadow: 0 5px 18px #17231c25; }
 .footer { display: flex; justify-content: space-between; align-items: center; padding-top: 16px; color: #899287; font-size: 8px; }
 .footer i { margin: 0 5px; font-style: normal; }
@@ -224,6 +253,7 @@ h1 em { color: var(--green); font-style: normal; }
   .brand-mark { width: 33px; height: 33px; border-radius: 10px; }
   .rail-rule { width: 1px; height: 22px; margin: 0 4px; }
   .rail-link { width: 38px; height: 38px; margin: 0; }
+  .notification-count { top: 0; right: 0; }
   .rail-bottom { flex: initial; align-items: center; padding: 0 7px; }
   .topbar { min-height: 58px; padding: 0 18px; }
   .brand-lockup { gap: 9px; }
@@ -259,6 +289,15 @@ h1 em { color: var(--green); font-style: normal; }
   .endpoint-input-wrap input { width: 100%; }
   .firebase-heading { align-items: start; flex-direction: column; gap: 7px; }
   .firebase-heading > span { text-align: left; }
+  .notifications-view { min-height: calc(100svh - 130px); padding: 12px 0 30px; }
+  .notifications-heading { min-height: 150px; align-items: center; gap: 12px; }
+  .notifications-heading h1 { font-size: 30px; }
+  .notification-summary { flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px; }
+  .notification-item { gap: 10px; padding: 16px 2px; }
+  .notification-title-row { align-items: flex-start; gap: 8px; }
+  .notification-title-row h2 { font-size: 12px; }
+  .notification-actions { gap: 4px; }
+  .notification-actions > span { font-size: 8px; }
   .footer { font-size: 7px; }
 }
 @media (max-width: 390px) {

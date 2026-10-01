@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
+  Bell,
   Bot,
   Check,
   ChevronRight,
@@ -17,12 +18,13 @@ import {
   Waves,
   Wifi,
   WifiOff,
+  X,
 } from 'lucide-react';
 import { firebaseApi, irrigationApi, type FirebaseValue, type IrrigationMode, type IrrigationStatus } from './api';
 import { currentSession, logOut } from './auth';
 import AuthScreen from './AuthScreen';
 
-const endpointKey = 'fieldline-controller-url';
+const endpointKey = 'LeafLink-controller-url';
 const defaultEndpoint = 'http://irrigation-controller.local';
 const defaultThreshold = 38;
 
@@ -149,6 +151,8 @@ function App() {
   const [firebaseValues, setFirebaseValues] = useState<FirebaseValue>();
   const [firebaseError, setFirebaseError] = useState('');
   const [firebaseUpdatedAt, setFirebaseUpdatedAt] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'notifications'>('overview');
+  const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!user) return;
@@ -255,6 +259,24 @@ function App() {
   const temperature = firebaseTemperature ?? (status?.climateValid ? status.temperatureC : null);
   const humidity = firebaseHumidity ?? (status?.climateValid ? status.humidityPercent : null);
   const tankLow = tank !== null && tank < 18;
+  const notifications = [
+    ...(!connected ? [{ id: 'controller', level: 'warning', title: 'Controller is offline', detail: 'Check the device address and Wi-Fi connection to restore live control.' }] : []),
+    ...(tankLow ? [{ id: 'tank', level: 'critical', title: 'Water reserve is too low', detail: `Tank level is ${Math.round(tank ?? 0)}%. Refill before running the pump.` }] : []),
+    ...(soilPercent !== null && soilPercent < threshold && !tankLow ? [{ id: 'soil', level: 'warning', title: 'Soil moisture is below target', detail: `Moisture is ${Math.round(soilPercent)}%, below your ${threshold}% target.` }] : []),
+    ...(connected && soilPercent === null ? [{ id: 'soil-sensor', level: 'warning', title: 'Soil sensor has no valid reading', detail: 'Check the probe connection; automatic irrigation needs a valid moisture value.' }] : []),
+    ...(firebaseError ? [{ id: 'firebase', level: 'warning', title: 'Firebase data is unavailable', detail: firebaseError }] : []),
+    ...(status?.pumpOn ? [{ id: 'pump', level: 'info', title: 'Watering is in progress', detail: 'The irrigation pump is currently running.' }] : []),
+  ];
+  const notificationIds = notifications.map((notification) => notification.id).join('|');
+  useEffect(() => {
+    const activeIds = new Set(notificationIds.split('|').filter(Boolean));
+    setDismissedNotifications((dismissed) => {
+      const next = new Set([...dismissed].filter((id) => activeIds.has(id)));
+      return next.size === dismissed.size ? dismissed : next;
+    });
+  }, [notificationIds]);
+  const visibleNotifications = notifications.filter((notification) => !dismissedNotifications.has(notification.id));
+  const attentionCount = visibleNotifications.filter((notification) => notification.level !== 'info').length;
 
   const aiInsight = useMemo(
     () =>
@@ -286,17 +308,21 @@ function App() {
   return (
     <main className="app-shell">
       <aside className="rail" aria-label="Main navigation">
-        <a className="brand-mark" href="#overview" aria-label="Fieldline home"><Sprout size={22} strokeWidth={2.1} /></a>
+        <a className="brand-mark" href="#overview" aria-label="LeafLink home"><Sprout size={22} strokeWidth={2.1} /></a>
         <div className="rail-rule" />
-        <a className="rail-link active" href="#overview" aria-label="Overview" title="Overview"><Activity size={19} /></a>
+        <a className={`rail-link ${activeTab === 'overview' ? 'active' : ''}`} href="#overview" aria-label="Overview" title="Overview" onClick={() => setActiveTab('overview')}><Activity size={19} /></a>
         <a className="rail-link" href="#sensors" aria-label="Sensors" title="Sensors"><Waves size={19} /></a>
         <a className="rail-link" href="#controls" aria-label="Controls" title="Controls"><SlidersHorizontal size={19} /></a>
+        <button className={`rail-link notification-link ${activeTab === 'notifications' ? 'active' : ''}`} type="button" aria-label={attentionCount ? `Notifications, ${attentionCount} active alerts` : 'Notifications'} title="Notifications" aria-current={activeTab === 'notifications' ? 'page' : undefined} onClick={() => setActiveTab('notifications')}>
+          <Bell size={19} />
+          {attentionCount > 0 && <span className="notification-count">{attentionCount > 9 ? '9+' : attentionCount}</span>}
+        </button>
         <div className="rail-bottom"><span className={`connection-dot ${connected ? 'online' : ''}`} /></div>
       </aside>
 
       <section className="workspace" id="overview">
         <header className="topbar">
-          <div className="brand-lockup"><span className="brand-name">fieldline</span><span className="brand-divider" /><span className="site-name">GARDEN / NORTH BED</span></div>
+          <div className="brand-lockup"><span className="brand-name">LeafLink</span><span className="brand-divider" /><span className="site-name">GARDEN / NORTH BED</span></div>
           <div className="topbar-right">
             <span className={`connection-state ${connected ? 'is-online' : ''}`}>
               {connected ? <Wifi size={15} /> : <WifiOff size={15} />}
@@ -308,6 +334,45 @@ function App() {
         </header>
 
         <div className="content">
+          {activeTab === 'notifications' ? (
+            <section className="notifications-view" aria-labelledby="notifications-title">
+              <div className="notifications-heading">
+                <div>
+                  <span className="eyebrow"><span className="eyebrow-line" /> SYSTEM FEED</span>
+                  <h1 id="notifications-title">Notifications</h1>
+                  <p className="intro-copy">Live alerts from your irrigation system.</p>
+                </div>
+                <div className={`notification-summary ${attentionCount ? 'has-alerts' : ''}`}>
+                  <strong>{attentionCount}</strong>
+                  <span>{attentionCount === 1 ? 'needs attention' : 'need attention'}</span>
+                </div>
+              </div>
+              <div className="notification-list" aria-live="polite">
+                {visibleNotifications.length ? visibleNotifications.map((notification) => (
+                  <article className={`notification-item notification-${notification.level}`} key={notification.id}>
+                    <span className="notification-symbol">{notification.level === 'info' ? <Droplets size={17} /> : <CircleAlert size={17} />}</span>
+                    <div className="notification-copy">
+                      <div className="notification-title-row">
+                        <h2>{notification.title}</h2>
+                        <div className="notification-actions">
+                          <span>{notification.level === 'critical' ? 'URGENT' : notification.level === 'warning' ? 'ATTENTION' : 'UPDATE'}</span>
+                          <button type="button" className="dismiss-notification" aria-label={`Dismiss ${notification.title}`} title="Dismiss notification" onClick={() => setDismissedNotifications((dismissed) => new Set(dismissed).add(notification.id))}><X size={15} /></button>
+                        </div>
+                      </div>
+                      <p>{notification.detail}</p>
+                    </div>
+                  </article>
+                )) : (
+                  <div className="notifications-empty">
+                    <span><Check size={18} /></span>
+                    <div><strong>{notifications.length ? 'You’re all caught up' : 'All clear'}</strong><p>{notifications.length ? 'Dismissed alerts will return if their conditions change.' : 'No active alerts. Your system is operating within its current limits.'}</p></div>
+                  </div>
+                )}
+              </div>
+              <button className="back-overview" type="button" onClick={() => setActiveTab('overview')}><Activity size={15} /> Back to overview</button>
+            </section>
+          ) : (
+            <>
           <section className="intro-row">
             <div>
               <div className="eyebrow"><span className="eyebrow-line" /> LIVE SYSTEM</div>
@@ -343,7 +408,7 @@ function App() {
           <section className="ai-panel" aria-live="polite">
             <div className="ai-header">
               <div>
-                <span className="eyebrow">FIELDLINE AI</span>
+                <span className="eyebrow">LeafLink AI</span>
                 <h2>Adaptive irrigation guidance</h2>
               </div>
               <div className="ai-confidence">
@@ -408,8 +473,10 @@ function App() {
             </div>
             <pre className="firebase-json" aria-live="polite">{firebaseValues === undefined ? (firebaseError || 'Loading values…') : JSON.stringify(firebaseValues, null, 2)}</pre>
           </section>
+            </>
+          )}
           {message && <div className="toast" role="status">{message}</div>}
-          <footer className="footer"><span>FIELDLINE <i>·</i> LOCAL CONTROL</span><span><span className={`footer-dot ${connected ? 'online' : ''}`} />{connected ? 'DATA STREAM ACTIVE' : 'RECONNECTING'} <button onClick={() => setRefreshTick((tick) => tick + 1)} aria-label="Retry connection"><RefreshCw size={12} /></button></span></footer>
+          <footer className="footer"><span>LeafLink <i>·</i> LOCAL CONTROL</span><span><span className={`footer-dot ${connected ? 'online' : ''}`} />{connected ? 'DATA STREAM ACTIVE' : 'RECONNECTING'} <button onClick={() => setRefreshTick((tick) => tick + 1)} aria-label="Retry connection"><RefreshCw size={12} /></button></span></footer>
         </div>
       </section>
     </main>

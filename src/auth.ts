@@ -4,8 +4,8 @@ interface StoredAccount {
   passwordHash: string;
 }
 
-const accountsKey = 'fieldline-accounts';
-const sessionKey = 'fieldline-session';
+const accountsKey = 'LeafLink-accounts';
+const sessionKey = 'LeafLink-session';
 const passwordIterations = 120_000;
 
 function readAccounts(): StoredAccount[] {

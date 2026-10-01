@@ -77,7 +77,7 @@ void updateDisplay() {
 
   display.clearBuffer();
   display.setFont(u8g2_font_6x10_tf);
-  display.drawStr(0, 10, "FIELDLINE IRRIGATION");
+  display.drawStr(0, 10, "LeafLink IRRIGATION");
   display.drawHLine(0, 13, 128);
   display.setFont(u8g2_font_5x7_tf);
   display.drawStr(0, 25, soilLine);
