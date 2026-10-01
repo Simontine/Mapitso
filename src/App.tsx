@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
+  Bot,
   Check,
   ChevronRight,
   CircleAlert,
@@ -41,6 +42,97 @@ function numericValue(value: FirebaseValue | undefined): number | null {
 function percentageValue(value: FirebaseValue | undefined): number | null {
   const number = numericValue(value);
   return number !== null && number >= 0 && number <= 100 ? number : null;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+type AiInsight = {
+  badge: string;
+  headline: string;
+  summary: string;
+  confidence: number;
+  recommendations: string[];
+  recommendedThreshold: number | null;
+};
+
+function buildAiInsight(input: {
+  soil: number | null;
+  tank: number | null;
+  temperature: number | null;
+  humidity: number | null;
+  threshold: number;
+  pumpOn: boolean;
+  tankLow: boolean;
+}): AiInsight {
+  const { soil, tank, temperature, humidity, threshold, pumpOn, tankLow } = input;
+
+  if (soil === null) {
+    return {
+      badge: 'Monitoring',
+      headline: 'Collecting field data',
+      summary: 'The soil sensor is not reporting a valid reading yet, so the AI is waiting for a fresh moisture sample before recommending action.',
+      confidence: 58,
+      recommendations: ['Check the soil probe wiring and placement.', 'Waiting for the next sensor refresh before dispatching a recommendation.'],
+      recommendedThreshold: null,
+    };
+  }
+
+  const recommendations: string[] = [];
+  let confidence = 68;
+  let headline = 'System is balanced';
+  let summary = 'Current conditions are stable, and the irrigation schedule looks consistent with your target moisture level.';
+  let recommendedThreshold = null;
+
+  if (tankLow) {
+    confidence += 12;
+    headline = 'Water reserve is at risk';
+    summary = 'The tank is below the safe operating threshold, so the system is protecting the pump from dry-running and the AI is prioritizing water conservation.';
+    recommendations.push('Tank level is too low for safe watering. Keep the pump locked out until the reservoir is replenished.');
+    recommendedThreshold = null;
+  } else if (soil < threshold - 8) {
+    confidence += 18;
+    headline = 'Moisture is trending dry';
+    summary = 'The soil is below your target by a meaningful margin, so the irrigation cycle should be allowed to run soon.';
+    recommendations.push('Watering is likely needed soon. If the trend continues, the next cycle should start before the lower threshold is crossed again.');
+    recommendedThreshold = clamp(threshold + 2, 15, 75);
+  } else if (soil > threshold + 10 && !pumpOn) {
+    confidence += 14;
+    headline = 'Soil is still comfortably wet';
+    summary = 'Moisture is above the target range, so the AI suggests delaying watering and conserving water for the next dry period.';
+    recommendations.push('Hold off on irrigation for the next cycle unless the weather turns hotter or drier.');
+    recommendedThreshold = clamp(threshold - 2, 15, 75);
+  } else {
+    recommendations.push('Current moisture is stable and close to your target, so routine watering remains appropriate.');
+  }
+
+  if (tank !== null && tank < 30) {
+    recommendations.push('Reservoir reserve is moderately low, so the system should avoid prolonged watering bursts.');
+    confidence += 8;
+  }
+
+  if (temperature !== null && temperature > 29 && humidity !== null && humidity < 45) {
+    confidence += 10;
+    recommendations.push('Warm, dry air is increasing evapotranspiration, so the garden may need more frequent checks during the day.');
+  }
+
+  if (soil < threshold - 3 && pumpOn) {
+    recommendations.push('The pump is actively watering the bed, which matches the current dry trend. Keep monitoring until the soil returns to range.');
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push('Keep the current schedule and monitor the next sensor refresh for drift.');
+  }
+
+  return {
+    badge: tankLow ? 'Protective' : soil < threshold ? 'Active' : 'Stable',
+    headline,
+    summary,
+    confidence: clamp(confidence, 55, 97),
+    recommendations,
+    recommendedThreshold,
+  };
 }
 
 function App() {
@@ -164,6 +256,26 @@ function App() {
   const humidity = firebaseHumidity ?? (status?.climateValid ? status.humidityPercent : null);
   const tankLow = tank !== null && tank < 18;
 
+  const aiInsight = useMemo(
+    () =>
+      buildAiInsight({
+        soil: soilPercent,
+        tank,
+        temperature,
+        humidity,
+        threshold,
+        pumpOn: Boolean(status?.pumpOn),
+        tankLow,
+      }),
+    [humidity, soilPercent, status?.pumpOn, tank, tankLow, temperature, threshold],
+  );
+
+  const applyAiThreshold = () => {
+    if (aiInsight.recommendedThreshold === null) return;
+    setThreshold(aiInsight.recommendedThreshold);
+    void runCommand(() => irrigationApi.configure(endpoint, aiInsight.recommendedThreshold!), 'AI threshold adjusted');
+  };
+
   const handleLogout = () => {
     logOut();
     setUser(null);
@@ -226,6 +338,37 @@ function App() {
               <div className="climate-values"><div><strong>{reading(temperature, '°')}</strong><span>C</span><small><Thermometer size={13} /> TEMP</small></div><i /><div><strong>{reading(humidity, '%')}</strong><small><Waves size={13} /> HUMIDITY</small></div></div>
               <div className="metric-foot"><span>{temperature !== null || humidity !== null ? 'Air conditions' : 'Awaiting sensor'}</span><span>Live readings</span></div>
             </article>
+          </section>
+
+          <section className="ai-panel" aria-live="polite">
+            <div className="ai-header">
+              <div>
+                <span className="eyebrow">FIELDLINE AI</span>
+                <h2>Adaptive irrigation guidance</h2>
+              </div>
+              <div className="ai-confidence">
+                <span className="ai-bot"><Bot size={15} /></span>
+                <strong>{aiInsight.confidence}%</strong>
+                <small>confidence</small>
+              </div>
+            </div>
+            <div className="ai-content">
+              <div className="ai-callout">
+                <span className={`ai-badge ${aiInsight.badge.toLowerCase().replace(/\s+/g, '-')}`}>{aiInsight.badge}</span>
+                <h3>{aiInsight.headline}</h3>
+                <p>{aiInsight.summary}</p>
+              </div>
+              <ul className="ai-recommendations">
+                {aiInsight.recommendations.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            {aiInsight.recommendedThreshold !== null && (
+              <button className="ai-apply" onClick={applyAiThreshold} disabled={!connected || busy}>
+                Apply AI target: {aiInsight.recommendedThreshold}% moisture
+              </button>
+            )}
           </section>
 
           <div className="section-heading"><div><span className="eyebrow">CONTROL DECK</span><h2>Water, thoughtfully.</h2></div><button className="icon-button" title="Refresh readings" aria-label="Refresh readings" onClick={() => setRefreshTick((tick) => tick + 1)}><RefreshCw size={16} /></button></div>
