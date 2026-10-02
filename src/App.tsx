@@ -20,12 +20,10 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { firebaseApi, irrigationApi, type FirebaseValue, type IrrigationMode, type IrrigationStatus } from './api';
+import { firebaseApi, type FirebaseValue, type IrrigationMode, type IrrigationStatus } from './api';
 import { currentSession, logOut } from './auth';
 import AuthScreen from './AuthScreen';
 
-const endpointKey = 'aquaSense-controller-url';
-const defaultEndpoint = 'http://irrigation-controller.local';
 const defaultThreshold = 38;
 
 function reading(value: number | null | undefined, suffix = ''): string {
@@ -44,6 +42,12 @@ function numericValue(value: FirebaseValue | undefined): number | null {
 function percentageValue(value: FirebaseValue | undefined): number | null {
   const number = numericValue(value);
   return number !== null && number >= 0 && number <= 100 ? number : null;
+}
+
+function hasFreshFirebaseStatus(status: IrrigationStatus | undefined): boolean {
+  if (!status || !Number.isFinite(status.updatedAt)) return false;
+  const age = Date.now() - status.updatedAt;
+  return age >= 0 && age < 30_000;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -151,18 +155,17 @@ function buildAiInsight(input: {
 
 function App() {
   const [user, setUser] = useState<string | null>(() => currentSession());
-  const [endpoint, setEndpoint] = useState(() => localStorage.getItem(endpointKey) ?? defaultEndpoint);
-  const [endpointDraft, setEndpointDraft] = useState(endpoint);
   const [status, setStatus] = useState<IrrigationStatus>();
   const [connected, setConnected] = useState(false);
+  const [pendingMode, setPendingMode] = useState<IrrigationMode | null>(null);
+  const [pendingPump, setPendingPump] = useState<boolean | null>(null);
   const [threshold, setThreshold] = useState(defaultThreshold);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
-  const [firebaseValues, setFirebaseValues] = useState<FirebaseValue>();
+  const [sensorData, setSensorData] = useState<FirebaseValue>();
   const [firebaseError, setFirebaseError] = useState('');
-  const [firebaseUpdatedAt, setFirebaseUpdatedAt] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'notifications'>('overview');
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(() => new Set());
 
@@ -171,16 +174,24 @@ function App() {
     let alive = true;
     const refresh = async () => {
       try {
-        const next = await irrigationApi.status(endpoint);
+        const snapshot = await firebaseApi.snapshot();
         if (!alive) return;
+        const next = snapshot.status ?? undefined;
         setStatus(next);
-        setThreshold(next.moistureThreshold);
-        setConnected(true);
-        setLastUpdated(new Date());
-        setMessage('');
-      } catch {
+        setSensorData(snapshot.sensorData ?? undefined);
+        if (next) setThreshold(next.moistureThreshold);
+        const fresh = hasFreshFirebaseStatus(next);
+        setConnected(fresh);
+        setLastUpdated(fresh && next ? new Date(next.updatedAt) : null);
+        setFirebaseError([
+          snapshot.statusError,
+          next ? (fresh ? null : 'ESP32 status is stale') : snapshot.statusError || 'Waiting for ESP32 status',
+          snapshot.sensorDataError ? `sensorData: ${snapshot.sensorDataError}` : null,
+        ].filter(Boolean).join(' · '));
+      } catch (error) {
         if (alive) {
           setConnected(false);
+          setFirebaseError(error instanceof Error ? error.message : 'Could not load Firebase data');
         }
       }
     };
@@ -190,75 +201,79 @@ function App() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [endpoint, refreshTick, user]);
+  }, [refreshTick, user]);
 
   useEffect(() => {
-    if (!user) return;
-    let alive = true;
-    const refreshFirebase = async () => {
-      try {
-        const values = await firebaseApi.values();
-        if (!alive) return;
-        setFirebaseValues(values);
-        setFirebaseError('');
-        setFirebaseUpdatedAt(new Date());
-      } catch (error) {
-        if (alive) setFirebaseError(error instanceof Error ? error.message : 'Could not load Firebase values');
-      }
-    };
-    void refreshFirebase();
-    const timer = window.setInterval(() => void refreshFirebase(), 5000);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-  }, [refreshTick, user]);
+    if (!pendingMode) return;
+    if (status?.mode === pendingMode) {
+      setPendingMode(null);
+      setMessage(`ESP32 confirmed ${pendingMode} mode`);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setPendingMode(null);
+      setMessage(`ESP32 has not confirmed ${pendingMode} mode. Check the device connection and firmware.`);
+    }, 15_000);
+    return () => window.clearTimeout(timeout);
+  }, [pendingMode, status?.mode]);
+
+  useEffect(() => {
+    if (pendingPump === null) return;
+    if (status?.pumpOn === pendingPump) {
+      setPendingPump(null);
+      setMessage(`Firebase confirmed pump ${pendingPump ? 'started' : 'stopped'}`);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setPendingPump(null);
+      setMessage(`Firebase has not confirmed the pump ${pendingPump ? 'start' : 'stop'} command. Check the device connection and firmware.`);
+    }, 15_000);
+    return () => window.clearTimeout(timeout);
+  }, [pendingPump, status?.pumpOn]);
 
   const runCommand = async (command: () => Promise<unknown>, success: string) => {
     setBusy(true);
     setMessage('');
     try {
       await command();
-      setMessage(success);
-      const next = await irrigationApi.status(endpoint);
-      setStatus(next);
-      setConnected(true);
-      setLastUpdated(new Date());
+      setMessage(`${success} in Firebase`);
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Command failed');
-      setConnected(false);
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
-  const saveEndpoint = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const normalized = endpointDraft.trim().replace(/\/$/, '');
-    if (!normalized) return;
-    const url = /^https?:\/\//.test(normalized) ? normalized : `http://${normalized}`;
-    localStorage.setItem(endpointKey, url);
-    setEndpointDraft(url);
-    setEndpoint(url);
-  };
-
   const changeMode = (mode: IrrigationMode) => {
-    void runCommand(() => irrigationApi.control(endpoint, mode), `Switched to ${mode} mode`);
+    setPendingMode(mode);
+    void runCommand(() => firebaseApi.control(mode), `${mode} mode command sent; waiting for ESP32 confirmation`)
+      .then((sent) => {
+        if (!sent) setPendingMode(null);
+      });
   };
 
   const saveThreshold = () => {
-    void runCommand(() => irrigationApi.configure(endpoint, threshold), 'Moisture threshold saved');
+    void runCommand(() => firebaseApi.configure(threshold), 'Moisture threshold saved');
   };
 
   const pumpToggle = () => {
     if (!status) return;
+    const requestedPump = !status.pumpOn;
+    setPendingPump(requestedPump);
     void runCommand(
-      () => irrigationApi.control(endpoint, 'manual', !status.pumpOn),
-      status.pumpOn ? 'Pump stopped' : 'Pump started',
-    );
+      () => firebaseApi.control('manual', requestedPump),
+      `Pump ${requestedPump ? 'start' : 'stop'} command sent`,
+    ).then((sent) => {
+      if (!sent) setPendingPump(null);
+    });
   };
 
-  const firebaseSensorData = property(firebaseValues, 'sensorData');
+  const firebaseSensorData = sensorData;
+  const firebaseStatusLabel = connected ? 'DEVICE ONLINE' : status ? 'STATUS STALE' : 'NO STATUS RECORD';
   const firebaseSoil = numericValue(property(firebaseSensorData, 'soilMoisture'));
   const firebaseTank = percentageValue(property(firebaseSensorData, 'tankLevel'));
   const firebaseTemperature = numericValue(property(firebaseSensorData, 'temp'));
@@ -273,11 +288,14 @@ function App() {
   const tankLow = tank !== null && tank < 18;
   const tankWarning = tank !== null && tank < 20;
   const temperatureOutOfRange = temperature !== null && (temperature < 20 || temperature > 35);
+  const temperatureAlertDetail = temperature !== null && temperature < 20
+    ? `Temperature is below 20°C (${Math.round(temperature)}°C).`
+    : `Temperature is above 35°C (${Math.round(temperature ?? 0)}°C).`;
   const humidityOutOfRange = humidity !== null && (humidity < 20 || humidity > 70);
   const soilVeryWet = soilPercent !== null && soilPercent > threshold + 10 && !status?.pumpOn;
   const environmentAlerts = [
     ...(temperatureOutOfRange ? [{
-      summary: `Temperature is ${Math.round(temperature)}°C, outside the 20–35°C range.`,
+      summary: temperatureAlertDetail,
       recommendation: 'Check the garden temperature and protect plants from excessive heat or cold.',
     }] : []),
     ...(humidityOutOfRange ? [{
@@ -290,9 +308,9 @@ function App() {
     }] : []),
   ];
   const notifications = [
-    ...(!connected ? [{ id: 'controller', level: 'warning', title: 'Controller is offline', detail: 'Check the device address and Wi-Fi connection to restore live control.' }] : []),
+    ...(!connected ? [{ id: 'controller', level: 'warning', title: 'Irrigation device is offline', detail: 'Check the device Wi-Fi connection and Firebase sync to restore live control.' }] : []),
     ...(tankWarning ? [{ id: 'tank', level: tankLow ? 'critical' : 'warning', title: tankLow ? 'Water reserve is too low' : 'Water reserve is low', detail: tankLow ? `Tank level is ${Math.round(tank ?? 0)}%. Refill before running the pump.` : `Tank level is ${Math.round(tank ?? 0)}%, below the 20% reserve alert. Refill soon.` }] : []),
-    ...(temperatureOutOfRange ? [{ id: 'temperature', level: 'warning', title: 'Temperature is outside range', detail: `Temperature is ${Math.round(temperature ?? 0)}°C. Expected range: 20–35°C.` }] : []),
+    ...(temperatureOutOfRange ? [{ id: 'temperature', level: 'warning', title: temperature !== null && temperature < 20 ? 'Temperature is below 20°C' : 'Temperature is above 35°C', detail: temperatureAlertDetail }] : []),
     ...(humidityOutOfRange ? [{ id: 'humidity', level: 'warning', title: 'Humidity is outside range', detail: `Humidity is ${Math.round(humidity ?? 0)}%. Expected range: 20–70%.` }] : []),
     ...(soilPercent !== null && soilPercent < threshold ? [{ id: 'soil', level: 'warning', title: 'Soil moisture is below target', detail: `Moisture is ${Math.round(soilPercent)}%, below your ${threshold}% target.` }] : []),
     ...(soilVeryWet ? [{ id: 'soil-wet', level: 'warning', title: 'Soil moisture is well above target', detail: `Moisture is ${Math.round(soilPercent)}%, more than 10 points above your ${threshold}% target. Consider delaying the next watering cycle.` }] : []),
@@ -329,7 +347,7 @@ function App() {
   const applyAiThreshold = () => {
     if (aiInsight.recommendedThreshold === null) return;
     setThreshold(aiInsight.recommendedThreshold);
-    void runCommand(() => irrigationApi.configure(endpoint, aiInsight.recommendedThreshold!), 'AI threshold adjusted');
+    void runCommand(() => firebaseApi.configure(aiInsight.recommendedThreshold!), 'AI threshold adjusted');
   };
 
   const handleLogout = () => {
@@ -360,7 +378,7 @@ function App() {
           <div className="topbar-right">
             <span className={`connection-state ${connected ? 'is-online' : ''}`}>
               {connected ? <Wifi size={15} /> : <WifiOff size={15} />}
-              {connected ? 'Controller online' : 'Controller offline'}
+              {connected ? 'Device live' : 'Device offline'}
             </span>
             <span className="topbar-date">{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Waiting for data'}</span>
             <div className="account-control"><span>{user}</span><button onClick={handleLogout} title="Sign out" aria-label="Sign out"><LogOut size={15} /></button></div>
@@ -415,7 +433,7 @@ function App() {
             </div>
             <div className={`system-badge ${connected ? 'badge-live' : ''}`}>
               <span className="badge-icon">{connected ? <Check size={16} /> : <CircleAlert size={16} />}</span>
-              <span><strong>{connected ? (status?.pumpOn ? 'Watering now' : 'System ready') : 'No connection'}</strong><small>{connected ? `Irrigation ${status?.mode ?? 'auto'} mode` : 'Check controller address'}</small></span>
+              <span><strong>{connected ? (status?.pumpOn ? 'Watering now' : 'System ready') : 'No connection'}</strong><small>{connected ? `Irrigation ${status?.mode ?? 'auto'} mode` : 'Check device Wi-Fi and Firebase'}</small></span>
             </div>
           </section>
 
@@ -477,11 +495,11 @@ function App() {
               <div className="panel-top"><div><span className="panel-kicker">01 / IRRIGATION</span><h3>Choose a rhythm</h3></div><span className="panel-icon"><Sprout size={18} /></span></div>
               <p className="panel-copy">Let soil moisture guide the pump, or take the wheel yourself.</p>
               <div className="mode-switch" role="group" aria-label="Irrigation mode">
-                <button className={status?.mode !== 'manual' ? 'selected' : ''} disabled={!connected || busy} onClick={() => changeMode('auto')}><Activity size={15} /> Auto</button>
-                <button className={status?.mode === 'manual' ? 'selected' : ''} disabled={!connected || busy} onClick={() => changeMode('manual')}><SlidersHorizontal size={15} /> Manual</button>
+                <button className={(pendingMode ?? status?.mode ?? 'auto') === 'auto' ? 'selected' : ''} aria-pressed={(pendingMode ?? status?.mode ?? 'auto') === 'auto'} onClick={() => changeMode('auto')}><Activity size={15} /> Auto</button>
+                <button className={(pendingMode ?? status?.mode) === 'manual' ? 'selected' : ''} aria-pressed={(pendingMode ?? status?.mode) === 'manual'} onClick={() => changeMode('manual')}><SlidersHorizontal size={15} /> Manual</button>
               </div>
               <div className="panel-divider" />
-              <div className="pump-row"><div><strong>Water pump</strong><span>{status?.pumpOn ? 'Running' : 'Standby'}{tankLow ? ' · Tank low' : ''}</span></div><button className={`pump-button ${status?.pumpOn ? 'pump-active' : ''}`} onClick={pumpToggle} disabled={!connected || busy || tankLow || tank === null} aria-label={status?.pumpOn ? 'Stop pump' : 'Start pump'}><Power size={17} /><span>{status?.pumpOn ? 'Stop' : 'Start'}</span></button></div>
+              <div className="pump-row"><div><strong>Water pump</strong><span>{status?.pumpOn ? 'Running' : 'Standby'}{pendingPump !== null ? ' · Awaiting Firebase' : tankLow ? ' · Tank low' : ''}</span></div><button className={`pump-button ${status?.pumpOn ? 'pump-active' : ''}`} onClick={pumpToggle} disabled={busy || pendingPump !== null || !status || (!status.pumpOn && (tankLow || tank === null))} aria-label={status?.pumpOn ? 'Stop pump' : 'Start pump'}><Power size={17} /><span>{status?.pumpOn ? 'Stop' : 'Start'}</span></button></div>
               {tankLow && <p className="safety-note"><CircleAlert size={14} /> Pump locked until the reservoir is refilled.</p>}
             </article>
 
@@ -497,20 +515,19 @@ function App() {
 
           <section className="connection-panel">
             <div className="connection-panel-icon"><Wifi size={17} /></div>
-            <div className="connection-info"><strong>Controller connection</strong><span>Same Wi-Fi network · ESP32 REST API</span></div>
-            <form className="endpoint-form" onSubmit={saveEndpoint}><label htmlFor="endpoint">DEVICE ADDRESS</label><div className="endpoint-input-wrap"><input id="endpoint" value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} spellCheck={false} /><button type="submit" title="Save device address" aria-label="Save device address"><Check size={16} /></button></div></form>
+            <div className="connection-info"><strong>Cloud connection</strong><span>ESP32 syncs readings and commands through Firebase Realtime Database</span></div>
           </section>
-          <section className="firebase-panel" aria-label="Firebase values">
+          <section className="firebase-panel" aria-label="Firebase data">
             <div className="firebase-heading">
-              <div><span className="eyebrow">REALTIME DATABASE</span><h2>Firebase values</h2></div>
-              <span>{firebaseError || (firebaseUpdatedAt ? `Updated ${firebaseUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Loading values…')}</span>
+              <div><span className="eyebrow">REALTIME DATABASE</span><h2>Firebase view</h2></div>
+              <span>{firebaseStatusLabel}{lastUpdated ? ` · ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}</span>
             </div>
-            <pre className="firebase-json" aria-live="polite">{firebaseValues === undefined ? (firebaseError || 'Loading values…') : JSON.stringify(firebaseValues, null, 2)}</pre>
+            <pre className="firebase-json" aria-live="polite">{JSON.stringify({ 'irrigation/status': status ?? null, sensorData: sensorData ?? null }, null, 2)}</pre>
           </section>
             </>
           )}
           {message && <div className="toast" role="status">{message}</div>}
-          <footer className="footer"><span>aquaSense <i>·</i> LOCAL CONTROL</span><span><span className={`footer-dot ${connected ? 'online' : ''}`} />{connected ? 'DATA STREAM ACTIVE' : 'RECONNECTING'} <button onClick={() => setRefreshTick((tick) => tick + 1)} aria-label="Retry connection"><RefreshCw size={12} /></button></span></footer>
+          <footer className="footer"><span>aquaSense <i>·</i> FIREBASE CONTROL</span><span><span className={`footer-dot ${connected ? 'online' : ''}`} />{connected ? 'DATA STREAM ACTIVE' : 'RECONNECTING'} <button onClick={() => setRefreshTick((tick) => tick + 1)} aria-label="Retry connection"><RefreshCw size={12} /></button></span></footer>
         </div>
       </section>
     </main>

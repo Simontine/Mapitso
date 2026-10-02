@@ -1,6 +1,6 @@
 # aquaSense Smart Irrigation
 
-A garden irrigation controller with an ESP32 sensor/pump unit and a React dashboard. The browser and ESP32 must be on the same trusted Wi-Fi network. The controller exposes a local REST API, and the dashboard also reads the configured Firebase Realtime Database.
+A garden irrigation controller with an ESP32 sensor/pump unit and a React dashboard. The ESP32 connects to Firebase Realtime Database over Wi-Fi; the dashboard reads status and queues control commands through Firebase, so the browser and device do not need to share a local network. The dashboard includes sensor readings, irrigation controls, notifications, and local rule-based irrigation guidance.
 
 ## Hardware assumptions
 
@@ -29,28 +29,47 @@ Connect sensor grounds to ESP32 ground. Never connect a pump directly to an ESP3
 ## Firmware setup
 
 1. Install PlatformIO (VS Code extension or PlatformIO Core).
-2. Copy `Esp32 Code/firmware/src/secrets.h.example` to `Esp32 Code/firmware/src/secrets.h` and enter the 2.4 GHz Wi-Fi credentials. The local credentials file is ignored by Git.
-3. Open `Esp32 Code/firmware` as a PlatformIO project, then build and upload to the ESP32. Serial Monitor runs at 115200 baud.
-4. On connection, the serial log prints the device IP. The dashboard default is `http://irrigation-controller.local`; if mDNS is unavailable, enter the printed IP in the dashboard's device address field.
+2. Create `Esp32 Code/firmware/secrets.h` with your own device configuration. This file is ignored by Git; keep it local and never commit it. For example:
+
+	```cpp
+	#define WIFI_SSID "your-2.4GHz-network"
+	#define WIFI_PASSWORD "your-wifi-password"
+	#define FIREBASE_DATABASE_URL "https://your-project-default-rtdb.firebaseio.com"
+	#define FIREBASE_AUTH_TOKEN ""
+	```
+
+	Use a Firebase auth token only if your database rules require one. The firmware expects the token to be available to the device; tokens embedded in firmware are not a secure way to protect production data.
+3. Open `Esp32 Code` as a PlatformIO project, then build and upload to the ESP32. Serial Monitor runs at 115200 baud.
+4. Confirm the ESP32 publishes a fresh `irrigation/status` record in Firebase. The dashboard uses the database URL in `.env.local` or the project default.
 
 PlatformIO Core commands from the project root:
 
 ```sh
-cp "Esp32 Code/firmware/src/secrets.h.example" "Esp32 Code/firmware/src/secrets.h"
-pio run -d "Esp32 Code/firmware"
-pio run -d "Esp32 Code/firmware" -t upload
-pio device monitor -d "Esp32 Code/firmware"
+pio run -d "Esp32 Code"
+pio run -d "Esp32 Code" -t upload
+pio device monitor -d "Esp32 Code"
 ```
 
-The ESP32 publishes `soilMoisture`, `temp`, `humidity`, and `tankLevel` to Firebase Realtime Database under `sensorData` every five seconds. Add a private `FIREBASE_AUTH_TOKEN` to the local `secrets.h` if required by the database rules. Restrict write access to the `sensorData` node and never commit credentials.
+The ESP32 publishes sensor readings to `sensorData` and control state to `irrigation/status` every five seconds. It polls `irrigation/command` every two seconds and ignores commands older than 30 seconds. Firebase time synchronization is required for command expiry and dashboard freshness checks. The firmware bundles Google Trust Services Root R1, which is verified for the configured Firebase endpoint; define `FIREBASE_ROOT_CA` locally only if your endpoint uses a different trusted chain. `FIREBASE_AUTH_TOKEN` is optional when database rules allow unauthenticated access and required otherwise.
+
+Set the dashboard database URL in `.env.local` if it differs from the default. For local development, the optional auth token can be set here too:
+
+```sh
+VITE_FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com
+VITE_FIREBASE_AUTH_TOKEN=your-short-lived-user-id-token
+```
+
+`VITE_` values are included in the browser bundle and are visible to every dashboard user. Never put a service-account key, database secret, or durable privileged credential there. The dashboard's email/password screen is a local demo account stored in this browser; it is not Firebase Authentication and does not restrict Firebase access. The dashboard's adaptive guidance is computed from local rules and sensor readings; it does not call an AI service.
+
+Configure Firebase Realtime Database rules deliberately. The dashboard needs read access to `sensorData` and `irrigation/status`, and write access to `irrigation/command`; the ESP32 needs to write sensor/status data and read commands. Do not make pump commands publicly writable. For production, use Firebase Authentication with rules tied to authenticated users or a trusted backend to authorize commands. The current direct-to-Firebase browser and firmware clients are intended for development with appropriately restricted rules, not as a production credential boundary.
 
 The SSD1309 display shows soil moisture, tank level, air temperature, air humidity, pump state, and irrigation mode. Sensor values display as `--` when the corresponding reading is invalid.
 
-The pump relay starts OFF at boot. In auto mode the pump turns on below the configured moisture threshold and turns off after the soil recovers by 5 percentage points. Pump operation is refused when the tank level is invalid or below 18%, including in manual mode. If either sensor calibration or relay polarity differs from your hardware, test with the pump disconnected first.
+The pump relay starts OFF at boot. In auto mode the pump turns on below the configured moisture threshold and turns off after the soil recovers by 5 percentage points. Pump operation is refused when the tank level is invalid or below 18%, including in manual mode; Firebase commands do not bypass these firmware checks. If either sensor calibration or relay polarity differs from your hardware, test with the pump disconnected first.
 
 ### Calibration
 
-Edit the constants near the top of `Esp32 Code/firmware/src/main.cpp` for your installation:
+Edit the constants near the top of `Esp32 Code/firmware/firmware.ino` for your installation:
 
 - `SOIL_DRY_RAW` and `SOIL_WET_RAW`: record the analog values in dry and well-watered soil; sensor outputs vary substantially.
 - `TANK_EMPTY_DISTANCE_CM` and `TANK_FULL_DISTANCE_CM`: measure from the ultrasonic sensor face to the empty/full water surface.
@@ -60,19 +79,17 @@ Ultrasonic sensors can produce invalid readings from narrow tanks, angled surfac
 
 ## Dashboard
 
-From the project root:
+From the project root, install dependencies and start the Vite development server:
 
 ```sh
 npm install
 npm run dev
 ```
 
-Open the Vite URL, then set the ESP32 address in the **Controller connection** field if needed. Controller readings and the complete Firebase database root refresh every five seconds. Firebase values are displayed read-only and are not used to control the pump. The configured database currently includes pet location and geofence history; public read rules expose those values to anyone with the URL, so restrict the database rules if that data should not be public. A production bundle is created with `npm run build`.
+Open the Vite URL printed in the terminal. Sensor readings and irrigation status refresh from Firebase every five seconds. Mode, threshold, and pump controls enqueue commands for the ESP32; commands require a fresh device status and are confirmed by the device. Notifications report connection and sensor conditions. The optional adaptive threshold suggestion is rule-based and can be applied from the dashboard. Build and type-check a production bundle with `npm run build`; preview it locally with `npm run preview`.
 
-The ESP32 API permits cross-origin requests and has no authentication because it is intended only for a trusted local network. Do not expose it directly to the internet or an untrusted network.
+## Firebase data contract
 
-## API contract
-
-- `GET /api/status`: current readings, validity flags, mode, threshold, and pump state.
-- `POST /api/config`: JSON body `{ "moistureThreshold": 38 }` (clamped to 15-75%).
-- `POST /api/control`: JSON body `{ "mode": "auto" }`, `{ "mode": "manual" }`, or `{ "mode": "manual", "pump": true }`.
+- `sensorData`: current `soilMoisture`, `tankLevel`, `temp`, and `humidity` readings.
+- `irrigation/status`: readings, sensor validity flags, pump state, mode, moisture threshold, and Unix-millisecond `updatedAt`.
+- `irrigation/command`: dashboard writes an `id` and `sentAt` with optional `mode`, `pump`, or `moistureThreshold` fields; the ESP32 applies fresh commands and enforces its local safety checks.
